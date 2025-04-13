@@ -124,16 +124,13 @@ function Get-GithubLatestRelease {
 $MD_ROOT = Safe-Join `
 	([Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)) `
 	".minedev"
-$MD_UPDATE = Safe-Join $MD_ROOT "repo"
-$MD_SCRIPTS = Safe-Join $MD_UPDATE "scripts"
-$MD_BINARIES = Safe-Join $MD_UPDATE "binaries"
+$MD_REPO_DIR = Safe-Join $MD_ROOT "repo"
+$MD_SCRIPTS_DIR = Safe-Join $MD_REPO_DIR "scripts"
+$MD_BINARIES_DIR = Safe-Join $MD_REPO_DIR "binaries"
 $MD_INFO_FILE = Safe-Join $MD_ROOT "minedev.json"
-
 
 ### Prepare directories
 New-Directory $MD_ROOT
-New-Directory $MD_UPDATE
-
 
 ### Load config file
 $MD_CONFIG = $null
@@ -147,9 +144,18 @@ try {
 	}
 }
 
-$dtLastUpdate = Parse-DateTime $MD_CONFIG.last_update_date
-if (([DateTime]::UtcNow - $dtLastUpdate) -gt [TimeSpan]::FromDays(3)) {
+
+### Check for updates
+if (-not $Update) {
+	$tsUpdateInterval = [TimeSpan]::FromDays(3)
+	$tsDaysNotUpdated = [DateTime]::UtcNow `
+		- (Parse-DateTime $MD_CONFIG.last_update_date)
+	$Update = $Update -or ($tsDaysNotUpdated -gt $tsUpdateInterval)
+}
+
+if ($Update) {
 	Write-Host "### Checking for updates"
+	#TODO: -TagPattern "testing-*" or "release-*"
 	$release = Get-GithubLatestRelease `
 		-Author "denchInside" `
 		-Repo "minedev-ps" `
@@ -160,6 +166,9 @@ if (([DateTime]::UtcNow - $dtLastUpdate) -gt [TimeSpan]::FromDays(3)) {
 	$tmpZip = Get-TempFileName
 	$tmpDir = Get-TempFileName
 	No-Output {
+		Remove-Item -Recurse -ErrorAction SilentlyContinue -LiteralPath $MD_REPO_DIR
+		New-Directory $MD_REPO_DIR
+
 		Invoke-WebRequest $release.zipball_url -OutFile $tmpZip
 		New-Directory $tmpDir
 		Expand-Archive -LiteralPath $tmpZip -DestinationPath $tmpDir
@@ -167,9 +176,10 @@ if (([DateTime]::UtcNow - $dtLastUpdate) -gt [TimeSpan]::FromDays(3)) {
 		$innerDir = Get-ChildItem `
 			-Directory -LiteralPath $tmpDir |
 			Select-Object -First 1
+		
 		Get-ChildItem -LiteralPath $innerDir |
 			ForEach-Object {
-				$itemPath = Safe-Join $MD_UPDATE `
+				$itemPath = Safe-Join $MD_REPO_DIR `
 					([System.IO.Path]::GetFileName($_.FullName))
 				Move-Item $_.FullName $itemPath
 			}
@@ -179,6 +189,7 @@ if (([DateTime]::UtcNow - $dtLastUpdate) -gt [TimeSpan]::FromDays(3)) {
 	}
 	$MD_CONFIG.last_update_date = Stringify-DateTime ([DateTime]::UtcNow)
 }
+
 
 ### Save config file
 $MD_CONFIG | To-Json > $MD_INFO_FILE

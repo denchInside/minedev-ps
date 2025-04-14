@@ -1,26 +1,22 @@
-name: Auto Release
+name: Auto Release with GH CLI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  tag-and-release:
+  release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+        with:
+          persist-credentials: false
 
-      - name: Configure Git and Authentication
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          # Set remote URL to use the FG-PAT for authentication
-          git remote set-url origin https://x-access-token:${{ secrets.FG_PAT }}@github.com/${{ github.repository }}
+      - name: Install GitHub CLI
+        uses: cli/cli-action@v2
 
-      - name: Determine Next Release Tag
-        id: get_tag
+      - name: Determine Next Tag
+        id: tag
         run: |
           prefix="release-"
           latest=$(git tag | grep "^$prefix" | sort -V | tail -n1)
@@ -29,15 +25,9 @@ jobs:
           next=$((num + 1))
           echo "tag=${prefix}${next}" >> $GITHUB_OUTPUT
 
-      - name: Create and Push Tag
-        run: |
-          git tag -a "${{ steps.get_tag.outputs.tag }}" -m "Auto release"
-          git push origin "${{ steps.get_tag.outputs.tag }}"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.get_tag.outputs.tag }}
-          generate_release_notes: true
+      - name: Create GitHub Release via gh
         env:
-          GITHUB_TOKEN: ${{ secrets.FG_PAT }}
+          GH_TOKEN: ${{ secrets.FG_PAT }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          gh release create "$tag" --title "$tag" --notes "Automated release"

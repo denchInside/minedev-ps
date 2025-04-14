@@ -20,12 +20,9 @@ jobs:
       - name: Determine Next Tag
         id: tag
         run: |
-          prefix="release-"
-          latest=$(git tag | grep "^$prefix" | sort -V | tail -n1)
-          num=${latest#$prefix}
-          num=${num:-0}
-          next=$((num + 1))
-          echo "tag=${prefix}${next}" >> $GITHUB_OUTPUT
+          prefix="release"
+          latest_commit=$(git rev-parse --short HEAD)
+          echo "tag=${prefix}-${latest_commit}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release via gh
         env:

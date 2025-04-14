@@ -53,7 +53,15 @@ function No-Output {
 	param([ScriptBlock]$f)
 	$null = & $f
 }
-function Assert-IsString {
+function Exit-On-Failure {
+    param([ScriptBlock]$f)
+    try {
+        & $f
+    } catch {
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor "Red"
+		[Environment]::Exit(1)
+    }
+}function Assert-IsString {
 	param([string]$Path)
 
 	if ($Path -eq $null) {
@@ -111,14 +119,13 @@ function Get-GithubLatestRelease {
 	$apiUrl = "https://api.github.com/repos/$Author/$Repo/releases"
 	$request = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "PowerShell" }
 	$release = $request |
-		Where-Object { $_.tag_name -like $TagPattern } |
 		Where-Object { $_.name -like $NamePattern } |
+		Where-Object { $_.tag_name -like $TagPattern } |
 		Sort-Object -Property published_at -Descending |
 		Select-Object -First 1
 	
 	return $release
 }
-
 
 ### Variable declarations
 $MD_ROOT = Safe-Join `
@@ -129,11 +136,13 @@ $MD_SCRIPTS_DIR = Safe-Join $MD_REPO_DIR "scripts"
 $MD_BINARIES_DIR = Safe-Join $MD_REPO_DIR "binaries"
 $MD_INFO_FILE = Safe-Join $MD_ROOT "minedev.json"
 
+
 ### Prepare directories
 New-Directory $MD_ROOT
 
 ### Load config file
 $MD_CONFIG = $null
+$FIRST_START = $false
 try {
 	$MD_CONFIG = Get-Content $MD_INFO_FILE -Raw | From-Json
 } catch {
@@ -142,27 +151,30 @@ try {
 		last_update_date = $dtDefault
 		last_version_date = $dtDefault
 	}
+	$FIRST_START = $true
 }
 
-
-### Check for updates
-if (-not $Update) {
-	$tsUpdateInterval = [TimeSpan]::FromDays(3)
-	$tsDaysNotUpdated = [DateTime]::UtcNow `
-		- (Parse-DateTime $MD_CONFIG.last_update_date)
-	$Update = $Update -or ($tsDaysNotUpdated -gt $tsUpdateInterval)
-}
-
-if ($Update) {
+### Program-related functions
+function Check-For-Updates {
 	Write-Host "### Checking for updates"
-	#TODO: -TagPattern "testing-*" or "release-*"
+	$pattern = if ($Testing) { "testing-*" } else { "main-*" }
+	
 	$release = Get-GithubLatestRelease `
 		-Author "denchInside" `
 		-Repo "minedev-ps" `
-		-TagPattern "test" `
+		-TagPattern $pattern `
 		-NamePattern '*' `
 		-PreRelease
-		
+	
+	if (-not $release) {
+		Write-Host "Error: No matching release found." `
+			"Try to run this command with flag '-Testing'." `
+			-ForegroundColor "Red" `
+			-Separator "`n"
+		if ($FIRST_START) { exit 1 }
+		return
+	}
+	
 	$tmpZip = Get-TempFileName
 	$tmpDir = Get-TempFileName
 	No-Output {
@@ -188,6 +200,17 @@ if ($Update) {
 		Remove-Item -Recurse -ErrorAction SilentlyContinue -LiteralPath $tmpDir
 	}
 	$MD_CONFIG.last_update_date = Stringify-DateTime ([DateTime]::UtcNow)
+}
+
+
+if (-not $Update) {
+	$tsUpdateInterval = [TimeSpan]::FromDays(3)
+	$tsDaysNotUpdated = [DateTime]::UtcNow `
+		- (Parse-DateTime $MD_CONFIG.last_update_date)
+	$Update = $Update -or ($tsDaysNotUpdated -gt $tsUpdateInterval)
+}
+if ($Update) {
+	Check-For-Updates
 }
 
 

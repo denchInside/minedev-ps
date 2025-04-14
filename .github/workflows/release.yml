@@ -17,17 +17,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install gh
 
-      - name: Fetch Tag Info
-        id: tag
-        run: |
-          prefix="release"
-          latest_commit=$(git rev-parse --short HEAD)
-          echo "tag=${prefix}-${latest_commit}" >> $GITHUB_OUTPUT
-
       - name: Fetch Branch Info
         id: branch
         run: |
           echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+
+      - name: Fetch Tag Info
+        id: tag
+        run: |
+          prefix="${{ steps.branch.outputs.branch }}"
+          latest_commit=$(git rev-parse --short HEAD)
+          echo "tag=${prefix}-${latest_commit}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release via gh
         env:

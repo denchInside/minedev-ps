@@ -2,7 +2,9 @@ name: Auto Release with GH CLI
 
 on:
   push:
-
+    tags:   []
+    branches: '**'
+    
 jobs:
   release:
     runs-on: ubuntu-latest

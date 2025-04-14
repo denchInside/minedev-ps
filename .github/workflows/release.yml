@@ -2,7 +2,6 @@ name: Auto Release with GH CLI
 
 on:
   push:
-    branches: [main]
 
 jobs:
   release:
@@ -17,16 +16,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install gh
 
-      - name: Determine Next Tag
+      - name: Determine Tag Info
         id: tag
         run: |
-          prefix="release"
-          latest_commit=$(git rev-parse --short HEAD)
-          echo "tag=${prefix}-${latest_commit}" >> $GITHUB_OUTPUT
+          branch="${GITHUB_REF#refs/heads/}"
+          commit=$(git rev-parse --short HEAD)
+          tag="${branch}-${commit}"
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          if [[ "$branch" != "main" ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Create GitHub Release via gh
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.FG_PAT }}
         run: |
           tag="${{ steps.tag.outputs.tag }}"
-          gh release create "$tag" --title "$tag" --notes "Automated release"
+          prerelease="${{ steps.tag.outputs.prerelease }}"
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes "Automated release from $tag" \
+            $( [[ "$prerelease" == "true" ]] && echo "--prerelease" )

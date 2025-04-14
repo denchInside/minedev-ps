@@ -39,4 +39,7 @@ jobs:
           if [[ "$branch" != "main" ]]; then
             extra="--prerelease"
           fi
-          gh release create "$tag" $extra --title "$tag" --notes "Automated release from $branch"
+          gh release create "$tag" $extra \
+            --title "$tag" \
+            --notes "Automated release from $branch" \
+            src/minedev.ps1

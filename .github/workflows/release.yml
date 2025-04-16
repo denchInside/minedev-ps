@@ -41,5 +41,6 @@ jobs:
           fi
           gh release create "$tag" $extra \
             --title "$tag" \
+            --target "$branch" \
             --notes "Automated release from $branch" \
             src/minedev.ps1

@@ -171,6 +171,7 @@ $MD_BINARIES_DIR = Safe-Join $MD_ROOT "binaries"
 $MD_GLOBAL_CONFIG_FILE = Safe-Join $MD_ROOT "minedev.json"
 $MD_DATE_MIN = Stringify-DateTime ([DateTime]::MinValue)
 $MD_CONFIG = $null
+$MD_GLOBALS = @{}
 $MD_IS_FIRST_START = $false
 $MD_PATH_DEFAULT = "$MD_BINARIES_DIR;$($env:PATH)"
 $env:PATH = $MD_PATH_DEFAULT

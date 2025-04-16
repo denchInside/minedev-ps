@@ -119,7 +119,7 @@ function Get-TempFileName {
 		([System.IO.Path]::GetRandomFileName())
 }
 
-function Exists {
+function Item-Exists {
 	foreach ($arg in $args) {
 		Assert-IsString $arg -DisallowEmpty
 		if (Test-Path -LiteralPath $arg) {
@@ -172,7 +172,7 @@ $MD_GLOBAL_CONFIG_FILE = Safe-Join $MD_ROOT "minedev.json"
 $MD_DATE_MIN = Stringify-DateTime ([DateTime]::MinValue)
 $MD_CONFIG = $null
 $MD_IS_FIRST_START = $false
-$MD_PATH_DEFAULT = "$MD_SHARED_SCRIPTS_DIR;$MD_BINARIES_DIR;$($env:PATH)"
+$MD_PATH_DEFAULT = "$MD_BINARIES_DIR;$($env:PATH)"
 $env:PATH = $MD_PATH_DEFAULT
 
 ### Program-related functions
@@ -295,6 +295,23 @@ function Md-Update {
 }
 
 
+### Enable shared script caching
+$ExecutionContext.InvokeCommand.PreCommandLookupAction = {
+    param($CommandName)
+
+    if (Get-Command $CommandName -ErrorAction SilentlyContinue) {
+		return
+    }
+	
+	$fileName = Safe-Join $MD_SHARED_SCRIPTS_DIR "$CommandName.ps1"
+	if (Item-Exists $fileName) {
+		$scriptText = Get-Content $fileName -Raw
+		$scriptBlock = [ScriptBlock]::Create($scriptText)
+		Set-Item "function:\global:$CommandName" -Value $scriptBlock
+	}
+}
+
+
 ### Run preparations
 Exit-On-Error {
 	New-Directory $MD_ROOT
@@ -362,7 +379,7 @@ Md-Save-Config
 ### RunScript mode
 if ($RunScript) {
 	Exit-On-Error {
-		if (-not (Exists $RunScript)) {
+		if (-not (Item-Exists $RunScript)) {
 			throw "The specified script does not exist."
 		}
 		
@@ -385,3 +402,4 @@ if ($RunCommand) {
 	}
 	exit 0
 }
+

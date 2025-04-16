@@ -43,7 +43,7 @@ param(
 	
 	# Hack: -Forked is set in a subsequent call
 	# ( the script is started in a new shell 
-	# to prevent any global variables overrides )
+	# to prevent any global variable overrides )
 	[switch]$Forked
 )
 
@@ -280,6 +280,17 @@ function Md-Update {
 	}
 	$MD_CONFIG.last_version_date = `
 		Stringify-DateTime (Parse-DateTime $release.published_at)
+	
+	$selfUpdate = Ask-User `
+		-Prompt "Update this script file?" `
+		-Choices @('y', 'n') `
+		-Default 'n'
+	if ($selfUpdate -eq 'y') {
+		$newPSScriptPath = Safe-Join $MD_REPO_DIR "src" "minedev.ps1"
+		$newPSScriptText = Get-Content $newPSScriptPath -Raw
+		Assert-IsString $newPSScriptText
+		$newPSScriptText > $PSCommandPath
+	}
 }
 
 

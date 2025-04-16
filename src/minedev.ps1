@@ -165,13 +165,14 @@ $MD_ROOT = Safe-Join `
 	([Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)) `
 	".minedev"
 $MD_REPO_DIR = Safe-Join $MD_ROOT "repo"
-$MD_SCRIPTS_DIR = Safe-Join $MD_REPO_DIR "scripts" "shared"
-$MD_BINARIES_DIR = Safe-Join $MD_REPO_DIR "binaries"
+$MD_SCRIPTS_DIR = Safe-Join $MD_REPO_DIR "src" "scripts"
+$MD_SHARED_SCRIPTS_DIR = Safe-Join $MD_SCRIPTS_DIR "shared"
+$MD_BINARIES_DIR = Safe-Join $MD_ROOT "binaries"
 $MD_GLOBAL_CONFIG_FILE = Safe-Join $MD_ROOT "minedev.json"
 $MD_DATE_MIN = Stringify-DateTime ([DateTime]::MinValue)
 $MD_CONFIG = $null
 $MD_IS_FIRST_START = $false
-$MD_PATH_DEFAULT = "$MD_SCRIPTS_DIR;$MD_BINARIES_DIR;$($env:PATH)"
+$MD_PATH_DEFAULT = "$MD_SHARED_SCRIPTS_DIR;$MD_BINARIES_DIR;$($env:PATH)"
 $env:PATH = $MD_PATH_DEFAULT
 
 ### Program-related functions

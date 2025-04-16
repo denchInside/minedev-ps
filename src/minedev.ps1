@@ -231,9 +231,11 @@ function Check-For-Updates {
 			return
 		}
 	}
-
+	
 	Write-Host "### Checking for updates"
 
+	$MD_CONFIG.last_update_date = `
+		Stringify-DateTime ([DateTime]::UtcNow)
 	$release = Get-GithubLatestRelease `
 		-Author "denchInside" `
 		-Repo "minedev-ps" `
@@ -286,8 +288,6 @@ function Check-For-Updates {
 	}
 	$MD_CONFIG.last_version_date = `
 		Stringify-DateTime (Parse-DateTime $release.published_at)
-	$MD_CONFIG.last_update_date = `
-		Stringify-DateTime ([DateTime]::UtcNow)
 }
 
 

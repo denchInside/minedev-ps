@@ -181,6 +181,7 @@ function Md-Save-Config {
 
 function Md-Load-Config {
 	$configRef = [ref]$MD_CONFIG
+	$isFirstStartRef = [ref]$MD_IS_FIRST_START
 	try {
 		$configRef.Value = Get-Content $MD_GLOBAL_CONFIG_FILE -Raw | From-Json
 	} catch {
@@ -190,7 +191,7 @@ function Md-Load-Config {
 			update_interval_days = 3
 			update_branch = "main"
 		}
-		$MD_IS_FIRST_START = $true
+		$isFirstStartRef.Value = $true
 	}
 }
 

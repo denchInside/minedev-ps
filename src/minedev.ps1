@@ -165,7 +165,7 @@ $MD_ROOT = Safe-Join `
 	([Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)) `
 	".minedev"
 $MD_REPO_DIR = Safe-Join $MD_ROOT "repo"
-$MD_SCRIPTS_DIR = Safe-Join $MD_REPO_DIR "scripts"
+$MD_SCRIPTS_DIR = Safe-Join $MD_REPO_DIR "scripts" "shared"
 $MD_BINARIES_DIR = Safe-Join $MD_REPO_DIR "binaries"
 $MD_GLOBAL_CONFIG_FILE = Safe-Join $MD_ROOT "minedev.json"
 $MD_DATE_MIN = Stringify-DateTime ([DateTime]::MinValue)

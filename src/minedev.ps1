@@ -169,10 +169,10 @@ $MD_SCRIPTS_DIR = Safe-Join $MD_REPO_DIR "scripts"
 $MD_BINARIES_DIR = Safe-Join $MD_REPO_DIR "binaries"
 $MD_GLOBAL_CONFIG_FILE = Safe-Join $MD_ROOT "minedev.json"
 $MD_DATE_MIN = Stringify-DateTime ([DateTime]::MinValue)
-$env:PATH = "$MD_SCRIPTS_DIR;$MD_BINARIES_DIR;$($env:PATH)"
 $MD_CONFIG = $null
 $MD_IS_FIRST_START = $false
-
+$MD_PATH_DEFAULT = "$MD_SCRIPTS_DIR;$MD_BINARIES_DIR;$($env:PATH)"
+$env:PATH = $MD_PATH_DEFAULT
 
 ### Program-related functions
 function Md-Save-Config {

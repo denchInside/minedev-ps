@@ -22,43 +22,35 @@
 	Set how often the tooling checks for updates.
 	Setting it to -1 disables update checks entirely.
 
+.PARAMETER Verbose
+	Makes error logging more verbose.
+
 .EXAMPLE
 	./minedev.ps1 -RunScript "./build_my_pack.ps1"
 #>
 
 
 param(
-	[string]$RunScript,
-	[string]$RunCommand,
+	$RunScript,
+	$RunCommand,
 	
 	[switch]$Update,
+	[switch]$Verbose,
 	[switch]$Version,
 	
-	[string]$SetUpdateBranch,
-	[int]$SetUpdateInterval = -2,
+	$SetUpdateBranch,
+	$SetUpdateInterval,
 	
-	# Hack: -Fork is set in a subsequent call
+	# Hack: -Forked is set in a subsequent call
 	# ( the script is started in a new shell 
 	# to prevent any global variables overrides )
-	[switch]$Fork
+	[switch]$Forked
 )
 
 
 ### Script forking
-if (-not $Fork) {
-	$argList = @($PSCommandPath, "-Fork") # Important: do not remove -Fork
-	
-	foreach ($kvp in $PSBoundParameters.GetEnumerator()) {
-		$name = "-$($kvp.Key)"
-		$value = $kvp.Value
-		if ($value -is [switch]) {
-			if ($value.IsPresent) { $argList += $name }
-		} else {
-			$argList += @($name, "$value")
-		}
-	}
-	
-	pwsh @argList 
+if (-not $Forked) {
+	pwsh $PSCommandPath -Forked @PSBoundParameters
 	return
 }
 
@@ -91,22 +83,22 @@ function No-Output {
 }
 
 function Assert-IsString {
-	param([string]$Path)
+	param($Value, [switch]$AllowNull, [switch]$DisallowEmpty)
 
-	if ($Path -eq $null) {
-		throw "Provided string is null."
-	}
-	if (-not ($Path.GetType() -eq [string])) {
+	if ($Value -eq $null) {
+		if (-not $AllowNull) {
+			throw "Provided string is null."
+		}
+	} elseif ($Value -isnot [string]) {
 		throw "Provided argument is not a string."
-	}
-	if ($Path.Length -lt 1) {
+	} elseif ($DisallowEmpty -and $Value.Length -lt 1) {
 		throw "Provided string is empty."
 	}
 }
 
 function Safe-Join {
 	foreach ($arg in $args) {
-		Assert-IsString $arg
+		Assert-IsString $arg -DisallowEmpty
 	}
 	return Join-Path @args
 }
@@ -114,7 +106,7 @@ function Safe-Join {
 function New-Directory {
 	param([string]$Path)
 	
-	Assert-IsString $Path
+	Assert-IsString $Path -DisallowEmpty
 	$null = New-Item -Path $Path `
 		-ItemType Directory `
 		-Force `
@@ -129,7 +121,7 @@ function Get-TempFileName {
 
 function Exists {
 	foreach ($arg in $args) {
-		Assert-IsString($arg)
+		Assert-IsString $arg -DisallowEmpty
 		if (Test-Path -LiteralPath $arg) {
 			return $true
 		}
@@ -138,14 +130,14 @@ function Exists {
 }
 
 filter To-Json {
-	$_ | ConvertTo-Json -Depth 10
+	$_ | ConvertTo-Json -Depth 16
 }
 
 filter From-Json {
 	$_ | ConvertFrom-Json -AsHashtable
 }
 
-function Get-GithubLatestRelease {
+function Github-GetLatestRelease {
 	param(
 		[string]$Author,
 		[string]$Repo,
@@ -175,37 +167,31 @@ $MD_ROOT = Safe-Join `
 $MD_REPO_DIR = Safe-Join $MD_ROOT "repo"
 $MD_SCRIPTS_DIR = Safe-Join $MD_REPO_DIR "scripts"
 $MD_BINARIES_DIR = Safe-Join $MD_REPO_DIR "binaries"
-$MD_INFO_FILE = Safe-Join $MD_ROOT "minedev.json"
-$DATE_MIN = Stringify-DateTime ([DateTime]::MinValue)
-
-
-### Prepare directories
-New-Directory $MD_ROOT
-
-
-### Load config file
+$MD_GLOBAL_CONFIG_FILE = Safe-Join $MD_ROOT "minedev.json"
+$MD_DATE_MIN = Stringify-DateTime ([DateTime]::MinValue)
+$env:PATH = "$MD_SCRIPTS_DIR;$MD_BINARIES_DIR;$($env:PATH)"
 $MD_CONFIG = $null
-# FIXME: Does not trigger again when interrupted first time and interval is -1
-$FIRST_START = $false
-try {
-	$MD_CONFIG = Get-Content $MD_INFO_FILE -Raw | From-Json
-} catch {
-	$MD_CONFIG = @{
-		last_update_date = $DATE_MIN
-		last_version_date = $DATE_MIN
-		update_interval_days = 3
-		update_branch = "main"
-	}
-	$FIRST_START = $true
-}
+$MD_IS_FIRST_START = $false
 
 
 ### Program-related functions
-function Minedev-Exit {
-	param([int]$exitCode)
-	
-	$MD_CONFIG | To-Json > $MD_INFO_FILE
-	exit $exitCode
+function Md-Save-Config {
+	$MD_CONFIG | To-Json > $MD_GLOBAL_CONFIG_FILE
+}
+
+function Md-Load-Config {
+	$configRef = [ref]$MD_CONFIG
+	try {
+		$configRef.Value = Get-Content $MD_GLOBAL_CONFIG_FILE -Raw | From-Json
+	} catch {
+		$configRef.Value = @{
+			last_update_date = $MD_DATE_MIN
+			last_version_date = $MD_DATE_MIN
+			update_interval_days = 3
+			update_branch = "main"
+		}
+		$MD_IS_FIRST_START = $true
+	}
 }
 
 function Exit-On-Error {
@@ -213,12 +199,17 @@ function Exit-On-Error {
     try {
         & $f
     } catch {
-        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor "Red"
-		Minedev-Exit 1
+		$details = if ($Verbose) `
+			{ $_.Exception.ToString() } `
+			else { $_.Exception.Message }
+
+		Md-Save-Config
+        Write-Host "Error:" $details -ForegroundColor "Red"
+		exit 1
     }
 }
 
-function Check-For-Updates {
+function Md-Update {
 	if (-not $Update) {
 		$tsUpdateInterval = `
 			[TimeSpan]::FromDays($MD_CONFIG.update_interval_days)
@@ -236,7 +227,7 @@ function Check-For-Updates {
 
 	$MD_CONFIG.last_update_date = `
 		Stringify-DateTime ([DateTime]::UtcNow)
-	$release = Get-GithubLatestRelease `
+	$release = Github-GetLatestRelease `
 		-Author "denchInside" `
 		-Repo "minedev-ps" `
 		-TagPattern "$($MD_CONFIG.update_branch)-*" `
@@ -249,7 +240,7 @@ function Check-For-Updates {
 			"Try changing the update branch via '-SetUpdateBranch'." `
 			-ForegroundColor "Red" `
 			-Separator "`n"
-		if ($FIRST_START) { Minedev-Exit 1 }
+		if ($MD_IS_FIRST_START) { exit 1 }
 		return
 	}
 	
@@ -291,13 +282,24 @@ function Check-For-Updates {
 }
 
 
+### Run preparations
+Exit-On-Error {
+	New-Directory $MD_ROOT
+	Md-Load-Config
+	Assert-IsString $RunScript -AllowNull
+	Assert-IsString $RunCommand -AllowNull
+	Assert-IsString $SetUpdateBranch -AllowNull
+	$null = [int]$SetUpdateInterval
+}
+
+
 ### Version mode
-if ($Version -and $FIRST_START) {
+if ($Version -and $MD_IS_FIRST_START) {
 	Write-Host `
 		"Tooling version not identified yet." `
 		"Try running this command with flag -Update first." `
 		-Separator "`n"
-	Minedev-Exit 0
+	exit 0
 }
 
 if ($Version) {
@@ -305,39 +307,68 @@ if ($Version) {
 		"Minedev tooling, last updated on $($MD_CONFIG.last_version_date)," `
 		"Release '$($MD_CONFIG.last_update_name)' on branch '$($MD_CONFIG.update_branch)'." `
 		-Separator "`n"
-	Minedev-Exit 0
+	exit 0
 }
 
 
 ### SetUpdateInterval mode
-if ($SetUpdateInterval -gt -2) {
-	$MD_CONFIG.update_interval_days = `
-		Exit-On-Error { [int]$SetUpdateInterval }
+if ($SetUpdateInterval) {
+	$MD_CONFIG.update_interval_days = $SetUpdateInterval
+	
+	Md-Save-Config
 	Write-Host "Interval set to" $SetUpdateInterval
-	Minedev-Exit 0
+	exit 0
 }
 
 
 ### SetUpdateBranch mode
-if (-not ([string]::IsNullOrEmpty($SetUpdateBranch))) {
+if ($SetUpdateBranch -ne $null) {
 	if ($SetUpdateBranch -in @("main", "testing")) {
 		$MD_CONFIG.update_branch = $SetUpdateBranch.ToLowerInvariant()
-		$MD_CONFIG.last_update_date = $DATE_MIN
+		$MD_CONFIG.last_update_date = $MD_DATE_MIN
 	} else {
 		Write-Host `
 			"Error: invalid branch specified." `
 			"Select either 'main' or 'testing'." `
 			-ForegroundColor "Red" `
 			-Separator "`n"
-		Minedev-Exit 1
+		exit 1
 	}
 	
+	Md-Save-Config
 	Write-Host "Update branch changed to" $MD_CONFIG.update_branch
-	Minedev-Exit 0
+	exit 0
 }
 
-### Check for updates
-Check-For-Updates
 
-### Finalize exit
-Minedev-Exit 0
+### Check for updates
+Md-Update
+Md-Save-Config
+
+
+### RunScript mode
+if ($RunScript) {
+	Exit-On-Error {
+		if (-not (Exists $RunScript)) {
+			throw "The specified script does not exist."
+		}
+		
+		$pwdOld = Get-Location
+		$scriptDir = [System.IO.Path]::GetDirectoryName($RunScript)
+		try { 
+			& $RunScript
+		} finally {
+			Set-Location $pwdOld
+		}
+	}
+	exit 0
+}
+
+
+### RunCommand mode
+if ($RunCommand) {
+	Exit-On-Error {
+		Invoke-Expression $RunCommand
+	}
+	exit 0
+}
